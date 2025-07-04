@@ -1,11 +1,8 @@
 import { ClothingItem } from "@shared/schema";
 import { Button } from "@/components/ui/button";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
-import axios from "axios";
-import { analyzeShoppingItem } from "./utils/openai";
 
 interface RecommendationCardProps {
   recommendation: {
@@ -13,6 +10,7 @@ interface RecommendationCardProps {
     items: ClothingItem[];
     rating?: number;
     feedback?: string | null;
+    reasoning?: string;
   };
 }
 
@@ -24,7 +22,7 @@ const feedbackOptions = [
 
 export function RecommendationCard({ recommendation }: RecommendationCardProps) {
   const { toast } = useToast();
-  const [submittedFeedback, setSubmittedFeedback] = useState<number | null>(recommendation.feedback ?? null);
+  const [submittedFeedback, setSubmittedFeedback] = useState<string | null>(recommendation.feedback ?? null);
   
   // Defensive: ensure recommendation and items are defined and items is an array
   if (!recommendation || !Array.isArray(recommendation.items) || recommendation.items.length < 2) {
@@ -36,9 +34,9 @@ export function RecommendationCard({ recommendation }: RecommendationCardProps) 
   }
   const items = recommendation.items;
 
-  const handleFeedback = async (feedback: number) => {
+  const handleFeedback = async (feedback: string) => {
     try {
-      const response = await fetch(`/api/recommendations/${recommendation.id}`, {
+      await apiRequest(`/api/recommendations/${recommendation.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -46,9 +44,6 @@ export function RecommendationCard({ recommendation }: RecommendationCardProps) 
         body: JSON.stringify({ feedback }),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to submit feedback");
-      }
       setSubmittedFeedback(feedback);
       toast({
         title: "Feedback taken!",
@@ -84,7 +79,9 @@ export function RecommendationCard({ recommendation }: RecommendationCardProps) 
       </div>
       <div className="w-full flex flex-col items-center">
         {submittedFeedback !== null ? (
-          <div className="text-green-600 font-medium mt-2">Feedback taken!</div>
+          <div className="text-green-600 font-medium mt-2">
+            Feedback: {submittedFeedback} {feedbackOptions.find(opt => opt.value === submittedFeedback)?.emoji}
+          </div>
         ) : (
           <div className="flex gap-6 mt-2">
             {feedbackOptions.map(opt => (
