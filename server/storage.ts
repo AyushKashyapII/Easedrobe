@@ -20,7 +20,7 @@ export interface IStorage {
   getClothingItemsByCategory(category: string, userId?: number): Promise<ClothingItem[]>;
   getClothingItem(id: number): Promise<ClothingItem | undefined>;
   createClothingItem(item: InsertClothingItem): Promise<ClothingItem>;
-  updateClothingItem(id: number, item: Partial<InsertClothingItem>): Promise<ClothingItem | undefined>;
+  updateClothingItem(id: number, item: Partial<ClothingItem>): Promise<ClothingItem | undefined>;
   deleteClothingItem(id: number): Promise<boolean>;
 
   // Outfit operations
@@ -122,8 +122,15 @@ export class DatabaseStorage implements IStorage {
         imageUrl,
         imageData: row.image_data,
         rating: row.rating,
-        tags: row.tags,
         caption: row.caption,
+        type: row.type,
+        color: row.color,
+        material: row.material,
+        pattern: row.pattern,
+        style: row.style,
+        fit: row.fit,
+        features: row.features,
+        targetAudience: row.target_audience,
         createdAt: row.created_at
       } as ClothingItem;
     });
@@ -143,8 +150,15 @@ export class DatabaseStorage implements IStorage {
         imageUrl: row.image_url,
         imageData: row.image_data,
         rating: row.rating,
-        tags: row.tags,
         caption: row.caption,
+        type: row.type,
+        color: row.color,
+        material: row.material,
+        pattern: row.pattern,
+        style: row.style,
+        fit: row.fit,
+        features: row.features,
+        targetAudience: row.target_audience,
         createdAt: row.created_at
       })) as ClothingItem[];
     } catch (error) {
@@ -175,8 +189,15 @@ export class DatabaseStorage implements IStorage {
         imageUrl,
         imageData: row.image_data,
         rating: row.rating,
-        tags: row.tags,
         caption: row.caption,
+        type: row.type,
+        color: row.color,
+        material: row.material,
+        pattern: row.pattern,
+        style: row.style,
+        fit: row.fit,
+        features: row.features,
+        targetAudience: row.target_audience,
         createdAt: row.created_at
       } as ClothingItem;
     } catch (error) {
@@ -193,19 +214,27 @@ export class DatabaseStorage implements IStorage {
 
       const result = await pool.query(`
         INSERT INTO clothing_items (
-          name, category, image_url, image_data, tags, rating, user_id, caption
+          name, category, image_url, image_data, rating, user_id, caption,
+          type, color, material, pattern, style, fit, features, target_audience
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING *
       `, [
         insertItem.name,
         insertItem.category,
         insertItem.imageUrl,
         insertItem.imageData,
-        analysis.tags,
         analysis.rating,
         insertItem.userId,
-        analysis.caption
+        analysis.caption,
+        analysis.type,
+        analysis.color,
+        analysis.material,
+        analysis.pattern,
+        analysis.style,
+        analysis.fit,
+        analysis.features,
+        analysis.targetAudience
       ]);
 
       if (!result.rows[0]) {
@@ -223,8 +252,15 @@ export class DatabaseStorage implements IStorage {
         imageUrl: row.image_url,
         imageData: row.image_data,
         rating: row.rating,
-        tags: row.tags,
         caption: row.caption,
+        type: row.type,
+        color: row.color,
+        material: row.material,
+        pattern: row.pattern,
+        style: row.style,
+        fit: row.fit,
+        features: row.features,
+        targetAudience: row.target_audience,
         createdAt: row.created_at
       } as ClothingItem;
     } catch (error) {
@@ -234,7 +270,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateClothingItem(id: number, data: Partial<ClothingItem>): Promise<ClothingItem | undefined> {
-    let { category, imageUrl, caption, tags } = data;
+    let { category, imageUrl, caption, type, color, material, pattern, style, fit, features, targetAudience } = data;
     const columns = [];
     const values = [];
 
@@ -262,9 +298,44 @@ export class DatabaseStorage implements IStorage {
       values.push(caption);
     }
 
-    if (tags !== undefined) {
-      columns.push("tags");
-      values.push(tags);
+    if (type !== undefined) {
+      columns.push("type");
+      values.push(type);
+    }
+
+    if (color !== undefined) {
+      columns.push("color");
+      values.push(color);
+    }
+
+    if (material !== undefined) {
+      columns.push("material");
+      values.push(material);
+    }
+
+    if (pattern !== undefined) {
+      columns.push("pattern");
+      values.push(pattern);
+    }
+
+    if (style !== undefined) {
+      columns.push("style");
+      values.push(style);
+    }
+
+    if (fit !== undefined) {
+      columns.push("fit");
+      values.push(fit);
+    }
+
+    if (features !== undefined) {
+      columns.push("features");
+      values.push(features);
+    }
+
+    if (targetAudience !== undefined) {
+      columns.push("target_audience");
+      values.push(targetAudience);
     }
 
     if (columns.length === 0) {
@@ -467,9 +538,12 @@ export class DatabaseStorage implements IStorage {
     try {
       const result = await pool.query(`
         INSERT INTO shopping_items (
-          name, image_url, image_data, rating, analysis, matching_item_ids, user_id
+          name, image_url, image_data, rating, analysis, matching_item_ids, user_id,
+          type, color, material, pattern, style, fit, target_audience,
+          styleCompatibility, colorHarmony, uniquenessOfType, 
+          fitMaterialDiversity, outfitCombinationPotential
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
         RETURNING *
       `, [
         insertItem.name,
@@ -478,7 +552,19 @@ export class DatabaseStorage implements IStorage {
         insertItem.rating,
         insertItem.analysis,
         insertItem.matchingItemIds,
-        insertItem.userId
+        insertItem.userId,
+        insertItem.type,
+        insertItem.color,
+        insertItem.material,
+        insertItem.pattern,
+        insertItem.style,
+        insertItem.fit,
+        insertItem.targetAudience,
+        insertItem.styleCompatibility,
+        insertItem.colorHarmony,
+        insertItem.uniquenessOfType,
+        insertItem.fitMaterialDiversity,
+        insertItem.outfitCombinationPotential
       ]);
 
       if (!result.rows[0]) {
