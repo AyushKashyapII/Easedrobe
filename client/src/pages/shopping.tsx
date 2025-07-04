@@ -66,7 +66,9 @@ export default function Shopping() {
           <div className="p-5">
             <p className="text-neutral-600 mb-4">
               Upload a photo of a clothing item you're considering buying. 
-              Our AI will analyze how well it fits with your existing wardrobe.
+              Our AI will provide a comprehensive analysis including style compatibility, 
+              color harmony, uniqueness, and outfit potential. For items scoring 7+ out of 10, 
+              we'll also show you recommended outfits using your existing wardrobe.
             </p>
             
             <div className="border-2 border-dashed border-neutral-200 rounded-lg p-6 text-center">
@@ -175,6 +177,127 @@ export default function Shopping() {
                       <div className="text-sm font-medium text-neutral-700 mb-1">Analysis</div>
                       <p className="text-sm text-neutral-600">{item.analysis}</p>
                     </div>
+
+                    {/* Scoring Breakdown */}
+                    {(item.styleCompatibility || item.colorHarmony || item.uniquenessOfType || item.fitMaterialDiversity || item.outfitCombinationPotential) && (
+                      <div className="mb-4">
+                        <div className="text-sm font-medium text-neutral-700 mb-2">Scoring Breakdown</div>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                          {item.styleCompatibility && (
+                            <div className="bg-blue-50 rounded-lg p-2">
+                              <div className="text-xs text-blue-700 font-medium">Style Compatibility</div>
+                              <div className="text-sm font-bold text-blue-800">{(item.styleCompatibility / 10).toFixed(1)}/2.5</div>
+                            </div>
+                          )}
+                          {item.colorHarmony && (
+                            <div className="bg-green-50 rounded-lg p-2">
+                              <div className="text-xs text-green-700 font-medium">Color Harmony</div>
+                              <div className="text-sm font-bold text-green-800">{(item.colorHarmony / 10).toFixed(1)}/2.0</div>
+                            </div>
+                          )}
+                          {item.uniquenessOfType && (
+                            <div className="bg-purple-50 rounded-lg p-2">
+                              <div className="text-xs text-purple-700 font-medium">Type Uniqueness</div>
+                              <div className="text-sm font-bold text-purple-800">{(item.uniquenessOfType / 10).toFixed(1)}/1.5</div>
+                            </div>
+                          )}
+                          {item.fitMaterialDiversity && (
+                            <div className="bg-orange-50 rounded-lg p-2">
+                              <div className="text-xs text-orange-700 font-medium">Fit/Material Diversity</div>
+                              <div className="text-sm font-bold text-orange-800">{(item.fitMaterialDiversity / 10).toFixed(1)}/1.5</div>
+                            </div>
+                          )}
+                          {item.outfitCombinationPotential && (
+                            <div className="bg-pink-50 rounded-lg p-2">
+                              <div className="text-xs text-pink-700 font-medium">Outfit Potential</div>
+                              <div className="text-sm font-bold text-pink-800">{(item.outfitCombinationPotential / 10).toFixed(1)}/2.5</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Item Attributes */}
+                    {(item.type || item.color || item.material || item.style || item.fit || item.pattern || item.targetAudience) && (
+                      <div className="mb-4">
+                        <div className="text-sm font-medium text-neutral-700 mb-2">Item Attributes</div>
+                        <div className="flex flex-wrap gap-2">
+                          {item.type && (
+                            <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded-full text-xs">Type: {item.type}</span>
+                          )}
+                          {item.color && Array.isArray(item.color) && item.color.map((color, idx) => (
+                            <span key={idx} className="bg-gray-100 text-gray-700 px-2 py-1 rounded-full text-xs">Color: {color}</span>
+                          ))}
+                          {item.material && Array.isArray(item.material) && item.material.map((material, idx) => (
+                            <span key={idx} className="bg-gray-100 text-gray-700 px-2 py-1 rounded-full text-xs">Material: {material}</span>
+                          ))}
+                          {item.style && Array.isArray(item.style) && item.style.map((style, idx) => (
+                            <span key={idx} className="bg-gray-100 text-gray-700 px-2 py-1 rounded-full text-xs">Style: {style}</span>
+                          ))}
+                          {item.fit && (
+                            <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded-full text-xs">Fit: {item.fit}</span>
+                          )}
+                          {item.pattern && Array.isArray(item.pattern) && item.pattern.map((pattern, idx) => (
+                            <span key={idx} className="bg-gray-100 text-gray-700 px-2 py-1 rounded-full text-xs">Pattern: {pattern}</span>
+                          ))}
+                          {item.targetAudience && (
+                            <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded-full text-xs">Target: {item.targetAudience}</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Recommendations (if score >= 7) */}
+                    {item.recommendations && item.recommendations.length > 0 && (
+                      <div className="mb-4">
+                        <div className="text-sm font-medium text-neutral-700 mb-2">Recommended Outfits</div>
+                        <div className="space-y-3">
+                          {item.recommendations.map((rec, idx) => (
+                            <div key={idx} className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-3 border border-blue-200">
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="text-sm font-medium text-blue-800">Outfit {idx + 1}</div>
+                                <div className="text-xs text-blue-600">Score: {rec.compatibilityScore?.toFixed(1)}/10</div>
+                              </div>
+                              <div className="flex flex-wrap gap-2 mb-2">
+                                {rec.top && (
+                                  <div className="flex items-center gap-1 bg-white rounded-full px-2 py-1 text-xs">
+                                    <img 
+                                      src={rec.top.imageUrl} 
+                                      alt={rec.top.name} 
+                                      className="w-4 h-4 rounded-full object-cover"
+                                    />
+                                    <span className="text-blue-700">{rec.top.name}</span>
+                                  </div>
+                                )}
+                                {rec.bottom && (
+                                  <div className="flex items-center gap-1 bg-white rounded-full px-2 py-1 text-xs">
+                                    <img 
+                                      src={rec.bottom.imageUrl} 
+                                      alt={rec.bottom.name} 
+                                      className="w-4 h-4 rounded-full object-cover"
+                                    />
+                                    <span className="text-blue-700">{rec.bottom.name}</span>
+                                  </div>
+                                )}
+                                {rec.footwear && (
+                                  <div className="flex items-center gap-1 bg-white rounded-full px-2 py-1 text-xs">
+                                    <img 
+                                      src={rec.footwear.imageUrl} 
+                                      alt={rec.footwear.name} 
+                                      className="w-4 h-4 rounded-full object-cover"
+                                    />
+                                    <span className="text-blue-700">{rec.footwear.name}</span>
+                                  </div>
+                                )}
+                              </div>
+                              {rec.reasoning && (
+                                <div className="text-xs text-blue-600 italic">{rec.reasoning}</div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     
                     {matchingItems.length > 0 && (
                       <div>
