@@ -143,7 +143,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Not authenticated" });
       }
       // Extract and validate the text data from the request
-      const { name, category, tags } = req.body;
+      const { name, category } = req.body;
 
       if (!name || !category || !req.file) {
         return res.status(400).json({ message: "Missing required fields" });
@@ -152,16 +152,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Convert file to base64
       const imageData = bufferToBase64(req.file.buffer);
 
-      // Process tags (convert from string to array if needed)
-      const parsedTags = tags ?
-        (typeof tags === 'string' ? tags.split(',').map(tag => tag.trim()) : tags) :
-        [];
-
       console.log('Creating clothing item with data:', {
         name,
         category,
         imageDataLength: imageData.length,
-        tagsCount: parsedTags.length,
         userId: user.id
       });
 
@@ -171,7 +165,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         category,
         imageUrl: `data:${req.file.mimetype};base64,${imageData}`,
         imageData,
-        tags: parsedTags,
         userId: user.id,
       });
 
@@ -349,44 +342,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // 1. Analyze image using imageAnalysis service (calls localhost:10000/predict internally)
       const analysisResult = await imageAnalysis.analyzeClothingItem(imageData);
-      const { caption, tags } = analysisResult;
+      const { caption, type, color, material, pattern, style, fit, features, targetAudience } = analysisResult;
 
       // 2. Get all wardrobe items
       const wardrobeItems = await storage.getClothingItems(user.id);
 
-      // 3. Score similarity with wardrobe items
-      function tagSimilarity(tagsA: string[] = [], tagsB: string[] = []): number {
-        if (!tagsA || !tagsB) return 0;
-        const setA = new Set(tagsA);
-        const setB = new Set(tagsB);
-        const intersection = new Set([...setA].filter(x => setB.has(x)));
-        return intersection.size / Math.max(setA.size, setB.size, 1);
-      }
-      const matchingScores = wardrobeItems.map(item => ({
-        id: item.id,
-        score: tagSimilarity(tags, item.tags || [])
-      }));
-      const matchingItemIds = matchingScores.filter(ms => ms.score > 0.2).map(ms => ms.id); // threshold can be tuned
-      const bestScore = matchingScores.length ? Math.max(...matchingScores.map(ms => ms.score)) : 0;
-      const rating = Math.round(3 + bestScore * 7); // scale: 3-10
-
-      // 4. Generate analysis using Groq (caption/tags only)
+      // 3. Generate comprehensive analysis using Groq with structured attributes
       const { analyzeShoppingItem } = await import("./utils/openai");
-      const openaiResult = await analyzeShoppingItem(caption, tags, wardrobeItems);
-      const analysis = openaiResult.analysis;
+      const openaiResult = await analyzeShoppingItem(caption, { type, color, material, pattern, style, fit, features, targetAudience }, wardrobeItems);
 
-      // 5. Store the shopping item
+      // 4. Check if score is above 7 and generate recommendations if needed
+      let recommendations: any[] = [];
+      if (openaiResult.rating >= 7) {
+        console.log("[SHOPPING] Score >= 7, generating recommendations...");
+        const recommendationService = new RecommendationService(storage);
+        recommendations = await recommendationService.generateRecommendations(user.id);
+        console.log("[SHOPPING] Generated recommendations:", recommendations.length);
+      }
+
+      // 5. Store the shopping item with structured attributes
       const shoppingItem = await storage.createShoppingItem({
         name,
         imageUrl: `data:${req.file.mimetype};base64,${imageData}`,
         imageData,
-        rating,
-        analysis,
-        matchingItemIds,
+        rating: openaiResult.rating,
+        analysis: openaiResult.analysis,
+        matchingItemIds: openaiResult.matchingItemIds,
         userId: user.id,
+        // Add structured attributes
+        type: openaiResult.type,
+        color: openaiResult.color,
+        material: openaiResult.material,
+        style: openaiResult.style,
+        fit: openaiResult.fit,
+        pattern: openaiResult.pattern,
+        targetAudience: openaiResult.targetAudience,
+        // Add scoring breakdown
+        styleCompatibility: Math.round(openaiResult.stylecompatibility * 10), // Convert to integer (0-25)
+        colorHarmony: Math.round(openaiResult.colorharmony * 10), // Convert to integer (0-20)
+        uniquenessOfType: Math.round(openaiResult.uniquenessoftype * 10), // Convert to integer (0-15)
+        fitMaterialDiversity: Math.round(openaiResult.fitmaterialdiversity * 10), // Convert to integer (0-15)
+        outfitCombinationPotential: Math.round(openaiResult.outfitcombinationpotential * 10), // Convert to integer (0-25)
       });
 
-      res.status(201).json(shoppingItem);
+      // 6. Return comprehensive response
+      const response = {
+        ...shoppingItem,
+        // Add recommendations if score >= 7
+        recommendations: recommendations.slice(0, 3).map(rec => ({
+          top: rec.top,
+          bottom: rec.bottom,
+          footwear: rec.footwear,
+          reasoning: rec.reasoning,
+          compatibilityScore: rec.compatibilityScore
+        }))
+      };
+
+      res.status(201).json(response);
     } catch (error) {
       console.error("Error analyzing shopping item:", error);
       res.status(500).json({ message: "Error analyzing shopping item" });
@@ -455,15 +467,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       await storage.setUserRecommendationsAvailable(userId, true);
 
-      // Sort by rating descending and take top 3
-      const topNewRecs = newRecommendations.sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 3);
-      const outfits = await Promise.all(topNewRecs.map(async (rec, idx) => {
-        console.log(`[RECOMMENDATIONS] Fetching items for new recommendation #${idx} with itemIds:`, rec.itemIds);
-        const items = await storage.getClothingItemsByIds(rec.itemIds || []);
-        console.log(`[RECOMMENDATIONS] Items fetched:`, items);
-        console.log('Recommendation:', rec, 'Items:', items);
-        return { ...rec, items };
+      // Transform new recommendations and save them to the database
+      const outfits = await Promise.all(newRecommendations.slice(0, 3).map(async (rec, idx) => {
+        const itemIds = [rec.top.id, rec.bottom.id];
+        if (rec.footwear) {
+          itemIds.push(rec.footwear.id);
+        }
+
+        console.log(`[RECOMMENDATIONS] Recommendation #${idx}:`, {
+          itemIds,
+          top: rec.top.name,
+          bottom: rec.bottom.name,
+          footwear: rec.footwear?.name,
+          reasoning: rec.reasoning,
+          compatibilityScore: rec.compatibilityScore
+        });
+
+        // Save the recommendation to the database
+        const savedRec = await storage.createRecommendation({
+          userId: userId,
+          itemIds: itemIds,
+          feedback: null,
+          rating: Math.round(rec.compatibilityScore)
+        });
+
+        return {
+          id: savedRec.id, // Use the actual database ID
+          user_id: userId,
+          item_ids: itemIds,
+          created_at: savedRec.createdAt?.toISOString() || new Date().toISOString(),
+          feedback: savedRec.feedback,
+          rating: savedRec.rating,
+          items: [rec.top, rec.bottom, ...(rec.footwear ? [rec.footwear] : [])],
+          reasoning: rec.reasoning
+        };
       }));
+
       console.log('[RECOMMENDATIONS] Returning new outfits count:', outfits.length);
       console.log('[RECOMMENDATIONS] Returning new outfits:', outfits);
 
