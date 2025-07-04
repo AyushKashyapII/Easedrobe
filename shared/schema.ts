@@ -87,8 +87,19 @@ export const clothingItems = pgTable("clothing_items", {
   imageUrl: text("image_url").notNull(),
   imageData: text("image_data").notNull(),
   rating: integer("rating"),
-  tags: text("tags").array(),
   caption: text("caption"),
+  // New structured columns for clothing attributes
+  type: text("type"),
+  color: text("color").array(), // Array since color can have multiple values
+  material: text("material").array(), // Array since material can have multiple values
+  pattern: text("pattern").array(), // Array since pattern can have multiple values
+  style: text("style").array(), // Array since style can have multiple values
+  fit: text("fit"), // Single value
+  features: text("features").array(), // Array since features can have multiple values
+  targetAudience: text("target_audience"), // Single value
+  // Existing columns from previous migration
+  occasions: text("occasions").array(),
+  seasonalRating: jsonb("seasonal_rating"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -147,6 +158,20 @@ export const shoppingItems = pgTable("shopping_items", {
   rating: integer("rating"), // AI-generated rating out of 10
   analysis: text("analysis").notNull(), // AI analysis of how it fits with existing wardrobe
   matchingItemIds: integer("matching_item_ids").array(), // Array of matching clothing item IDs
+  // New structured columns for shopping item attributes
+  type: text("type"),
+  color: text("color").array(), // Array since color can have multiple values
+  material: text("material").array(), // Array since material can have multiple values
+  pattern: text("pattern").array(), // Array since pattern can have multiple values
+  style: text("style").array(), // Array since style can have multiple values
+  fit: text("fit"), // Single value
+  targetAudience: text("target_audience"), // Single value
+  // Scoring breakdown columns
+  styleCompatibility: integer("style_compatibility"),
+  colorHarmony: integer("color_harmony"),
+  uniquenessOfType: integer("uniqueness_of_type"),
+  fitMaterialDiversity: integer("fit_material_diversity"),
+  outfitCombinationPotential: integer("outfit_combination_potential"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
