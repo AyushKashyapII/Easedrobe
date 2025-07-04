@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ApiErrorMessage } from "@/components/shared/ApiErrorMessage";
 import { ClothingItem, Outfit } from "@shared/schema";
 import { RecommendationCard } from "@/components/outfits/RecommendationCard";
+import { API_BASE_URL } from "@/config";
 
 // Backend recommendation structure
 interface BackendRecommendation {
@@ -19,7 +20,8 @@ interface BackendRecommendation {
   created_at: string;
   feedback: string | null;
   rating: number;
-  items: ClothingItem[]; // This is empty from backend
+  items: ClothingItem[];
+  reasoning?: string; // New field for AI reasoning
 }
 
 // Frontend recommendation structure (what RecommendationCard expects)
@@ -27,12 +29,21 @@ interface FrontendRecommendation {
   id: number;
   items: ClothingItem[];
   rating?: number;
+  reasoning?: string;
 }
 
 // Helper to convert a recommended clothing item array into an Outfit object
 function recommendationToOutfit(items: ClothingItem[]): Outfit {
-  // Combine tags and captions from all items
-  const allTags = items.flatMap(item => item.tags || []);
+  // Create tags from structured attributes
+  const allTags: string[] = [];
+  items.forEach(item => {
+    if (item.type) allTags.push(item.type);
+    if (item.color) allTags.push(...(Array.isArray(item.color) ? item.color : [item.color]));
+    if (item.material) allTags.push(...(Array.isArray(item.material) ? item.material : [item.material]));
+    if (item.style) allTags.push(...(Array.isArray(item.style) ? item.style : [item.style]));
+    if (item.fit) allTags.push(item.fit);
+    if (item.targetAudience) allTags.push(item.targetAudience);
+  });
   const uniqueTags = [...new Set(allTags)];
   const analysis = items.map(item => item.caption).filter(Boolean).join(' | ');
 
@@ -85,7 +96,7 @@ export default function Home() {
   } = useQuery<BackendRecommendation[]>({
     queryKey: ['/api/recommendations'],
     queryFn: async () => {
-      const res = await fetch('/api/recommendations?force=true');
+      const res = await fetch(`${API_BASE_URL}/api/recommendations?force=true`);
       if (!res.ok) throw new Error('Network response was not ok');
       return res.json();
     },
@@ -98,7 +109,7 @@ export default function Home() {
   // Transform backend recommendations to frontend format
   const recommendations: FrontendRecommendation[] = backendRecommendations.map(rec => {
     // Find the actual clothing items based on item_ids
-    const items = rec.item_ids
+    const items = (rec.item_ids || [])
       .map(id => wardrobeItems.find(item => item.id === id))
       .filter((item): item is ClothingItem => item !== undefined);
     
@@ -106,6 +117,7 @@ export default function Home() {
       id: rec.id,
       items: items,
       rating: rec.rating,
+      reasoning: rec.reasoning,
     };
   }).filter(rec => rec.items.length > 0); // Only include recommendations with valid items
   
@@ -113,6 +125,9 @@ export default function Home() {
   console.log('Backend Recommendations:', backendRecommendations);
   console.log('Transformed Frontend Recommendations:', recommendations);
   console.log('Available Wardrobe Items:', wardrobeItems);
+  console.log('Recommendations Enabled:', recommendationsEnabled);
+  console.log('Recommendations Loading:', recommendationsLoading);
+  console.log('Recommendations Error:', recommendationsError);
   
   // Open upload modal with the correct type
   const handleOpenUploadModal = (type: "outfit" | "item" | "shopping") => {
@@ -123,8 +138,8 @@ export default function Home() {
   // Handler to enable and fetch recommendations
   const handleGetRecommendations = async () => {
     setRecommendationsEnabled(true);
-    // Optionally, you can call refetchRecommendations() here if you want immediate fetch
-    // await refetchRecommendations();
+    // Immediately fetch recommendations when enabled
+    await refetchRecommendations();
   };
   
   // Handle refreshing AI suggestions
