@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import { ClothingItem } from "@shared/schema";
 
 
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY ;
 const GROQ_MODEL = process.env.GROQ_MODEL || "llama3-70b-8192";
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
@@ -66,7 +66,7 @@ export async function analyzeImage(caption: string, tags: string[]): Promise<Clo
       },
       {
         role: "user",
-        content: `Description: ${caption}\nTags: [${tags.join(", ")}]`
+        content: `Description: ${caption}\nTags: [${Array.isArray(tags) ? tags.join(", ") : tags || ""}]`
       }
     ];
     const response = await groqChatCompletion(messages, { type: "json_object" });
@@ -87,38 +87,137 @@ export async function analyzeImage(caption: string, tags: string[]): Promise<Clo
   }
 }
 
+type ComprehensiveShoppingAnalysisResult = {
+  rating: number;
+  analysis: string;
+  matchingItemIds: number[];
+  potentialOutfits: number;
+  // New structured attributes
+  type: string;
+  color: string[];
+  material: string[];
+  style: string[];
+  fit: string;
+  pattern: string[];
+  targetAudience: string;
+  // Detailed scoring breakdown
+  stylecompatibility: number;
+  colorharmony: number;
+  uniquenessoftype: number;
+  fitmaterialdiversity: number;
+  outfitcombinationpotential: number;
+  // Recommendations if score > 7
+  recommendations?: any[];
+};
+
+interface StructuredAttributes {
+  type?: string;
+  color?: string[];
+  material?: string[];
+  pattern?: string[];
+  style?: string[];
+  fit?: string;
+  features?: string[];
+  targetAudience?: string;
+}
+
 export async function analyzeShoppingItem(
   caption: string,
-  tags: string[],
+  attributes: StructuredAttributes,
   wardrobeItems: ClothingItem[]
-): Promise<ShoppingAnalysisResult> {
+): Promise<ComprehensiveShoppingAnalysisResult> {
   try {
     console.log("[analyzeShoppingItem] caption:", caption);
-    console.log("[analyzeShoppingItem] tags:", tags);
+    console.log("[analyzeShoppingItem] attributes:", attributes);
     console.log("[analyzeShoppingItem] wardrobeItems:", wardrobeItems);
+
+    // Create a comprehensive description from structured attributes
+    const attributeDescription = [
+      attributes.type && `Type: ${attributes.type}`,
+      attributes.color && `Color: ${Array.isArray(attributes.color) ? attributes.color.join(', ') : attributes.color}`,
+      attributes.material && `Material: ${Array.isArray(attributes.material) ? attributes.material.join(', ') : attributes.material}`,
+      attributes.style && `Style: ${Array.isArray(attributes.style) ? attributes.style.join(', ') : attributes.style}`,
+      attributes.fit && `Fit: ${attributes.fit}`,
+      attributes.pattern && `Pattern: ${Array.isArray(attributes.pattern) ? attributes.pattern.join(', ') : attributes.pattern}`,
+      attributes.targetAudience && `Target Audience: ${attributes.targetAudience}`,
+      attributes.features && `Features: ${Array.isArray(attributes.features) ? attributes.features.join(', ') : attributes.features}`
+    ].filter(Boolean).join(' | ');
+
     const wardrobeDescription = wardrobeItems.map(item =>
-      `ID: ${item.id}, Name: ${item.name}, Category: ${item.category}, Rating: ${item.rating || 'N/A'}`
+      `ID: ${item.id}, Name: ${item.name}, Category: ${item.category}, Type: ${item.type || 'N/A'}, Color: ${Array.isArray(item.color) ? item.color.join(', ') : item.color || 'N/A'}, Style: ${Array.isArray(item.style) ? item.style.join(', ') : item.style || 'N/A'}, Material: ${Array.isArray(item.material) ? item.material.join(', ') : item.material || 'N/A'}, Fit: ${item.fit || 'N/A'}, Pattern: ${Array.isArray(item.pattern) ? item.pattern.join(', ') : item.pattern || 'N/A'}, Target Audience: ${item.targetAudience || 'N/A'}`
     ).join('\n');
+
     const messages = [
       {
         role: "system",
-        content: `You are a shopping assistant AI that helps users decide if a clothing item would be a good addition to their wardrobe.\nAnalyze the provided item description and tags and compare it with the user's existing wardrobe items.\n\nUser's existing wardrobe:\n${wardrobeDescription}\n\nBased on the description, tags, and the existing wardrobe, provide:\n1. A rating from 1-10 for how well this item would fit in their wardrobe\n2. An analysis explaining why this would be a good/bad purchase\n3. A list of item IDs from their wardrobe that would match well with this item\n4. An estimate of how many potential new outfits could be created\nReturn your analysis in JSON format with the following keys: rating, analysis, matchingItemIds (array of IDs), potentialOutfits (number).`
+        content: `You are a comprehensive fashion analysis AI that evaluates shopping items against a user's existing wardrobe.
+
+ANALYSIS CRITERIA:
+1. Style Compatibility (2.5 pts): Is it compatible with user's dominant style (e.g., streetwear, formal)?
+2. Color Harmony (2.0 pts): Does it complement or contrast user's commonly used colors?
+3. Uniqueness of Type (1.5 pts): Is this type missing or overrepresented in wardrobe?
+4. Fit/Material Diversity (1.5 pts): Is this adding a new fit or texture variety?
+5. Outfit Combination Potential (2.5 pts): Can this item form complete outfits with other wardrobe pieces?
+
+SCORING BREAKDOWN:
+- Style Compatibility: 2.5 pts
+- Color Harmony: 2.0 pts  
+- Uniqueness of Type: 1.5 pts
+- Fit/Material Diversity: 1.5 pts
+- Outfit Combination Potential: 2.5 pts
+Total: 10 pts
+
+User's existing wardrobe:
+${wardrobeDescription}
+
+Based on the description, attributes, and existing wardrobe, provide a comprehensive analysis in JSON format with these keys:
+- rating: Overall score (1-10)
+- analysis: Detailed explanation of the analysis
+- matchingItemIds: Array of wardrobe item IDs that would work well with this item
+- potentialOutfits: Number of potential new outfits
+- type: The type of clothing item
+- color: Array of colors
+- material: Array of materials
+- style: Array of styles
+- fit: The fit type
+- pattern: Array of patterns
+- targetAudience: Target audience
+- stylecompatibility: Score for style compatibility (0-2.5)
+- colorharmony: Score for color harmony (0-2.0)
+- uniquenessoftype: Score for uniqueness (0-1.5)
+- fitmaterialdiversity: Score for diversity (0-1.5)
+- outfitcombinationpotential: Score for outfit potential (0-2.5)
+
+If the overall rating is 7 or higher, also include:
+- recommendations: Array of outfit recommendations using existing wardrobe items`
       },
       {
         role: "user",
-        content: `Description: ${caption}\nTags: [${tags.join(", ")}]`
+        content: `Description: ${caption}\nItem Attributes: ${attributeDescription}`
       }
     ];
-    //console.log("[analyzeShoppingItem] messages:", JSON.stringify(messages, null, 2));
+
     const response = await groqChatCompletion(messages, { type: "json_object" });
-    //console.log("[analyzeShoppingItem] Groq response:", response);
     const result = JSON.parse(response.choices[0].message.content || "{}");
-    //console.log("[analyzeShoppingItem] Parsed result:", result);
+
     return {
       rating: Math.min(10, Math.max(1, Math.round(result.rating || 5))),
       analysis: result.analysis || "No analysis provided",
       matchingItemIds: result.matchingItemIds || [],
-      potentialOutfits: result.potentialOutfits || 0
+      potentialOutfits: result.potentialOutfits || 0,
+      type: result.type || "Unknown",
+      color: Array.isArray(result.color) ? result.color : [result.color || "Unknown"],
+      material: Array.isArray(result.material) ? result.material : [result.material || "Unknown"],
+      style: Array.isArray(result.style) ? result.style : [result.style || "Unknown"],
+      fit: result.fit || "Unknown",
+      pattern: Array.isArray(result.pattern) ? result.pattern : [result.pattern || "Unknown"],
+      targetAudience: result.targetAudience || "Unknown",
+      stylecompatibility: Math.round(result.stylecompatibility * 10),
+      colorharmony: Math.round(result.colorharmony * 10),
+      uniquenessoftype: Math.round(result.uniquenessoftype * 10),
+      fitmaterialdiversity: Math.round(result.fitmaterialdiversity * 10),
+      outfitcombinationpotential: Math.round(result.outfitcombinationpotential * 10),
+      recommendations: result.recommendations || []
     };
   } catch (error: any) {
     console.error("Groq shopping analysis error:", error);
@@ -126,7 +225,19 @@ export async function analyzeShoppingItem(
       rating: 5,
       analysis: "Unable to analyze this item against your wardrobe. Please try again.",
       matchingItemIds: [],
-      potentialOutfits: 0
+      potentialOutfits: 0,
+      type: "Unknown",
+      color: ["Unknown"],
+      material: ["Unknown"],
+      style: ["Unknown"],
+      fit: "Unknown",
+      pattern: ["Unknown"],
+      targetAudience: "Unknown",
+      stylecompatibility: 0,
+      colorharmony: 0,
+      uniquenessoftype: 0,
+      fitmaterialdiversity: 0,
+      outfitcombinationpotential: 0
     };
   }
 }
