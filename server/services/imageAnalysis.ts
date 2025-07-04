@@ -245,18 +245,37 @@ export class ImageAnalysisService {
             // Log the raw response
             console.log('Raw response from Python backend:', JSON.stringify(response.data, null, 2));
 
-            // Extract caption and attributes
+            // Extract caption and attributes from the new structured format
             const { caption, attributes } = response.data;
             console.log('Extracted data:', {
                 caption,
                 attributes
             });
 
-            // Return the analysis result
+            // Parse the structured attributes
+            const {
+                type,
+                color,
+                material,
+                pattern,
+                style,
+                fit,
+                features,
+                target_audience
+            } = attributes || {};
+
+            // Return the structured analysis result
             return {
                 caption,
-                attributes,
-                tags: attributes || [],
+                // Structured attributes
+                type,
+                color,
+                material,
+                pattern,
+                style,
+                fit,
+                features,
+                targetAudience: target_audience,
                 rating: 7,  // You can calculate this based on attributes if needed
                 analysis: caption || "No caption available"
             };
@@ -269,12 +288,15 @@ export class ImageAnalysisService {
             }
             // Return a default/error structure if the call fails
             return {
-                category: "Tops",
-                tags: ["error", "backend"],
-                color: "unknown",
-                material: "unknown",
-                style: "unknown",
-                occasions: [],
+                caption: "Failed to analyze image",
+                type: "unknown",
+                color: [],
+                material: [],
+                pattern: [],
+                style: [],
+                fit: "unknown",
+                features: [],
+                targetAudience: "unknown",
                 rating: 0,
                 analysis: "Failed to get analysis from Python backend."
             };
